@@ -12,11 +12,18 @@ const postSchema = mongoose.Schema(
       type: String,
       required: false,
     },
-    imagePath: [{ type: String }],
-    videoPath: [{ type: String }],
+    imagePaths: [{ type: String }],
+    videoPaths: [{ type: String }],
+    likes: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    comments: [
+      {
+        user_id: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        text: { type: String, required: true },
+      },
+    ],
     fileType: {
       type: String,
-      enum: ["image", "video", "none"],
+      enum: ["file", "none"],
       default: "none",
     },
   },

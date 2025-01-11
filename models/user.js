@@ -1,26 +1,38 @@
-const { Timestamp } = require("mongodb");
 const mongoose = require("mongoose");
 
 const userSchema = mongoose.Schema(
   {
     fname: {
       type: String,
-      required: [true, "add the user first name"],
+      required: [true, "Add the user's first name"],
     },
     lname: {
       type: String,
-      required: [true, "add the user last name"],
+      required: [true, "Add the user's last name"],
     },
     email: {
       type: String,
-      required: [true, "add the user email"],
+      required: [true, "Add the user's email"],
     },
     password: {
       type: String,
-      required: [true, "add the user password"],
+      required: [true, "Add the user's password"],
+    },
+    isVerified: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true }
 );
+
+// Add virtual for full name
+userSchema.virtual("name").get(function () {
+  return `${this.fname} ${this.lname}`;
+});
+
+// Ensure virtuals are included in JSON responses
+userSchema.set("toObject", { virtuals: true });
+userSchema.set("toJSON", { virtuals: true });
 
 module.exports = mongoose.model("User", userSchema);
