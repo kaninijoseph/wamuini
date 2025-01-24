@@ -6,14 +6,17 @@ const http = require("http");
 const socketIo = require("socket.io");
 const uploadRoute = require("./controllers/postContollers");
 const { head } = require("./routes/postRoutes");
+const path = require("path");
 
 connectDb();
 const app = express();
 app.use(cors());
 
 app.use(express.json());
+app.use("/uploads", express.static(path.join(__dirname, "./uploads")));
 app.use("/api/users", require("./routes/userRoutes"));
 app.use("/api/posts", require("./routes/postRoutes"));
+app.use("/api/email", require("./routes/emailRoutes"));
 
 app.get("/", (req, res) => {
   res.send("Welcome to Wamuini App");

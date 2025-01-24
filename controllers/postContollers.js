@@ -7,25 +7,68 @@ const { wss } = require("../index");
 const path = require("path");
 require("dotenv").config({ path: "./env" });
 
-// Broadcast message to all connected clients
-const broadcast = (data) => {
+const broadcast = async (post, fetchDetails = true) => {
+  // Populate user details
+  await post.populate("user_id", "fname lname");
+
+  // Add name field
+  const name = `${post.user_id.fname} ${post.user_id.lname}`;
+
+  // Conditionally fetch likes and comments only if needed
+  let likes = [];
+  let comments = [];
+
+  if (fetchDetails) {
+    likes = await Like.find({ post_id: post._id }).populate(
+      "user_id",
+      "username"
+    );
+    comments = await Comment.find({ post_id: post._id }).populate(
+      "user_id",
+      "username"
+    );
+  }
+
+  // Process image and video paths
+  const imagePaths = post.imagePaths.map(
+    (imagePath) => `/uploads/images/${path.basename(imagePath)}`
+  );
+  const videoPaths = post.videoPaths.map(
+    (videoPath) => `/uploads/videos/${path.basename(videoPath)}`
+  );
+
+  const media = [
+    ...imagePaths.map((path) => ({ type: "image", path })),
+    ...videoPaths.map((path) => ({ type: "video", path })),
+  ];
+
+  // Construct the post payload
+  const postPayload = {
+    id: post._id,
+    text: post.text,
+    userId: post.user_id._id,
+    name,
+    likes,
+    comments,
+    media,
+    createdAt: post.createdAt,
+  };
+
   wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify(data));
+      client.send(JSON.stringify({ type: "NEW_POST", post: postPayload }));
     }
   });
 };
 
 // Create post handler
 const createPost = asyncHandler(async (req, res) => {
-  const { text } = req.body;
+  const { content: text } = req.body;
+  const mediaFiles = req.files["media"] || []; // Get the media files
 
-  const imageFiles = req.files["image"]
-    ? req.files["image"].map((file) => file.path)
-    : [];
-  const videoFiles = req.files["video"]
-    ? req.files["video"].map((file) => file.path)
-    : [];
+  // Separate images and videos based on their destination folder (handled by multer)
+  const imageFiles = mediaFiles.filter((file) => file.path.includes("images"));
+  const videoFiles = mediaFiles.filter((file) => file.path.includes("videos"));
 
   let fileType = "none";
   if (imageFiles.length > 0) fileType = "file";
@@ -34,8 +77,8 @@ const createPost = asyncHandler(async (req, res) => {
   const post = new Post({
     user_id: req.user.id,
     text,
-    imagePaths: imageFiles, // Save all image paths
-    videoPaths: videoFiles, // Save all video paths
+    imagePaths: imageFiles.map((file) => file.path), // Save all image paths
+    videoPaths: videoFiles.map((file) => file.path), // Save all video paths
     fileType,
   });
 
@@ -48,7 +91,7 @@ const createPost = asyncHandler(async (req, res) => {
   try {
     await post.save();
     console.log("Post saved", post);
-    res.status(201).json(post);
+    res.status(201).json({ message: "Post created successfully" });
   } catch (error) {
     console.log("Error saving post", error);
     res.status(400).json({ error: error.message });
@@ -110,9 +153,10 @@ const addComent = asyncHandler(async (req, res) => {
 
     await comment.save();
 
+    broadcast(post);
+
     const post = await Post.findById(id);
-    broadcast({ type: "UPDATE_POST", post });
-    res.status(201).json(post);
+    res.status(201).json({ message: "Post created succesfuly" });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -186,11 +230,15 @@ const GetPosts = asyncHandler(async (req, res) => {
       const media = [
         ...post.imagePaths.map((imagePath) => ({
           type: "image",
-          path: `/uploads/images/${path.basename(imagePath)}`,
+          path: `http://localhost:3000/uploads/images/${path.basename(
+            imagePath
+          )}`,
         })),
         ...post.videoPaths.map((videoPath) => ({
           type: "video",
-          path: `/uploads/videos/${path.basename(videoPath)}`,
+          path: `http://localhost:3000/uploads/videos/${path.basename(
+            videoPath
+          )}`,
         })),
       ];
 

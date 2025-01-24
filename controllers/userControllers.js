@@ -19,17 +19,14 @@ const createUser = asyncHandler(async (req, res) => {
       return;
     }
 
-    // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       res.status(400).json({ message: "user is already registered" });
       return;
     }
 
-    // Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create the new user
     const user = await User.create({
       email,
       fname,
@@ -38,11 +35,18 @@ const createUser = asyncHandler(async (req, res) => {
       isVerified: false, // Initially not verified
     });
 
-    const token = await Token.create({
+    const newToken = await Token.create({
       userId: user._id,
       token: crypto.randomBytes(32).toString("hex"),
     });
-    const url = `${process.env.BASE_URL}/api/users/${user._id}/verify/${token.token}`;
+
+    const verificationToken = jwt.sign(
+      { userId: user._id, dbToken: newToken.token },
+      process.env.VERIFICATION_TOKEN_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    const url = `${process.env.BASE_URL}/verify-email-token?token=${verificationToken}`;
 
     await sendEmail(user.email, "verify Email", url);
 
@@ -52,43 +56,6 @@ const createUser = asyncHandler(async (req, res) => {
   } catch (error) {
     console.log(error);
     res.status(500).json({ message: error });
-  }
-});
-
-//verify Email Token
-//Get
-const verifyEmailToken = asyncHandler(async (req, res) => {
-  try {
-    // Fetch user by ID
-    const user = await User.findOne({ _id: req.params.id });
-    if (!user) {
-      return res.status(400).json({ message: "Invalid Link: User not found" });
-    }
-
-    // Check if the user is already verified
-    if (user.isVerified) {
-      return res.status(200).json({ message: "Email already verified" });
-    }
-
-    // Find the token associated with the user
-    const token = await Token.findOne({
-      userId: user._id,
-      token: req.params.token,
-    });
-    if (!token) {
-      return res.status(400).json({ message: "Invalid Link: Token not found" });
-    }
-
-    // Verify the user and remove the token
-    user.isVerified = true;
-    await user.save();
-    await Token.deleteOne({ _id: token._id });
-
-    // res.redirect("http://localhost:5173/api/users/:id/verify/:token");
-    return res.status(200).json({ message: "Email verification successful" });
-  } catch (error) {
-    console.error("Error during email verification:", error.message);
-    return res.status(500).json({ message: "Failed to verify email" });
   }
 });
 
@@ -128,7 +95,7 @@ const loginUser = asyncHandler(async (req, res) => {
       process.env.VERIFICATION_TOKEN_SECRET,
       { expiresIn: "60m" }
     );
-    return res.status(302).json({
+    return res.status(400).json({
       message: "Please verify your email before logging in.",
       redirectUrl: `/verify-email?token=${verificationToken}`,
     });
@@ -147,10 +114,10 @@ const loginUser = asyncHandler(async (req, res) => {
       },
     },
     process.env.ACESS_TOKEN_SECRET,
-    { expiresIn: "6h" }
+    { expiresIn: "1d" }
   );
 
   res.status(200).json({ accessToken, message: "Login successful." });
 });
 
-module.exports = { createUser, loginUser, deleteUser, verifyEmailToken };
+module.exports = { createUser, loginUser, deleteUser };

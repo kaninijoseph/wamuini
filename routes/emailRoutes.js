@@ -1,5 +1,12 @@
 const express = require("express");
-const sendVerification_Email = require("../controllers/emailControllers");
+const {
+  sendVerification_Email,
+  verifyEmailToken,
+} = require("../controllers/emailControllers");
 const router = express.Router();
 
-router.get("/verify-email", sendVerification_Email);
+router.post("/verify-email", sendVerification_Email);
+
+router.post("/verify-email-token", verifyEmailToken);
+
+module.exports = router;

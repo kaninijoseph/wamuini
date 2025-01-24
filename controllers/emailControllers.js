@@ -3,35 +3,24 @@ const crypto = require("crypto");
 const Token = require("../models/token");
 const User = require("../models/user");
 const jwt = require("jsonwebtoken");
-const sendEmail = require("../middleware/sendEmail"); //
+const sendEmail = require("../middleware/sendEmail");
 
 require("dotenv").config({ path: "./env" });
 
-const sendVerificationEmail = async (user) => {
-  // Generate token
-  const token = await Token.create({
-    userId: user._id,
-    token: crypto.randomBytes(32).toString("hex"),
-  });
-
-  // Construct verification URL
-  const url = `${process.env.BASE_URL}/api/users/${user._id}/verify/${token.token}`;
-
-  // Send the email
-  await sendEmail(user.email, "Verify Your Email", url);
-};
-
 const sendVerification_Email = asyncHandler(async (req, res) => {
-  const { token } = req.body;
+  const { token: requestToken } = req.body; // Renaming the token from request body
 
-  if (!token) {
+  if (!requestToken) {
     return res.status(400).json({ message: "Token is required." });
   }
 
   // Verify the provided token to decode the user's information
   try {
-    const decoded = jwt.verify(token, process.env.VERIFICATION_TOKEN_SECRET);
-    const user = await User.findById(decoded.id); // Find the user using the decoded ID
+    const decoded = jwt.verify(
+      requestToken,
+      process.env.VERIFICATION_TOKEN_SECRET
+    );
+    const user = await User.findById(decoded.id);
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -60,14 +49,20 @@ const sendVerification_Email = asyncHandler(async (req, res) => {
       await Token.deleteOne({ userId: user._id });
     }
 
-    const token = await Token.create({
+    const newToken = await Token.create({
+      // Renaming the new token variable
       userId: user._id,
       token: crypto.randomBytes(32).toString("hex"),
     });
 
-    const url = `${process.env.BASE_URL}/api/users/${user._id}/verify/${token.token}`;
+    const verificationToken = jwt.sign(
+      { userId: user._id, dbToken: newToken.token },
+      process.env.VERIFICATION_TOKEN_SECRET,
+      { expiresIn: "1h" }
+    );
 
-    // Send the verification email
+    const url = `${process.env.BASE_URL}/verify-email-token?token=${verificationToken}`;
+
     await sendEmail(user.email, "Verify Your Email", url);
 
     res
@@ -81,4 +76,53 @@ const sendVerification_Email = asyncHandler(async (req, res) => {
   }
 });
 
-module.exports = sendVerification_Email;
+//verify Email Token
+//Get
+const verifyEmailToken = asyncHandler(async (req, res) => {
+  const { token: verificationToken } = req.body;
+
+  if (!verificationToken) {
+    console.log("verification token is required.");
+    return res
+      .status(400)
+      .json({ message: "Invalid email verification request" });
+  }
+  try {
+    const decoded = jwt.verify(
+      verificationToken,
+      process.env.VERIFICATION_TOKEN_SECRET
+    );
+    const { userId, dbToken } = decoded;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(400).json({ message: "Invalid token: User not found" });
+    }
+
+    if (user.isVerified) {
+      return res
+        .status(400)
+        .json({ message: "Email already verified. Login." });
+    }
+
+    // Find the token associated with the user
+    const token = await Token.findOne({
+      userId: user._id,
+      token: dbToken,
+    });
+    if (!token) {
+      return res.status(400).json({ message: "Invalid email Token." });
+    }
+
+    user.isVerified = true;
+    await user.save();
+    await Token.deleteOne({ _id: token._id });
+
+    return res.status(200).json({ message: "Email verification successful" });
+  } catch (error) {
+    console.error("Error during email verification:", error.message);
+    return res.status(500).json({ message: "Failed to verify email" });
+  }
+});
+
+module.exports = { sendVerification_Email, verifyEmailToken };

@@ -10,19 +10,15 @@ const {
   GetPosts,
 } = require("../controllers/postContollers");
 const handleUpload = require("../config/multer");
-const checkEmailVerification = require("../middleware/checkEmailVerification");
 
 const router = express.Router();
 
 router.use(validateToken);
-router.use(checkEmailVerification);
-router.use(express.static(path.join(__dirname, "uploads")));
+
 router.post(
   "/create",
   handleUpload,
   (req, res, next) => {
-    console.log("Body:", req.body);
-    console.log("Files:", req.files);
     next();
   },
   createPost
